@@ -1,7 +1,7 @@
 -- ipcrypt_deterministic.lua - Deterministic IPCrypt implementation using AES-128
 
-local utils = require("utils")
-local aes = require("aes")
+local utils = require("ipcrypt.utils")
+local aes = require("ipcrypt.cipher.aes")
 
 local ipcrypt_deterministic = {}
 

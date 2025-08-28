@@ -1,12 +1,16 @@
 #!/usr/bin/env lua
 -- test_vectors.lua - Test suite for IPCrypt implementation
 
-local utils = require("utils")
-local ipcrypt_deterministic = require("ipcrypt_deterministic")
-local ipcrypt_nd = require("ipcrypt_nd")
-local ipcrypt_ndx = require("ipcrypt_ndx")
-local kiasu_bc = require("kiasu_bc")
-local aes_xts = require("aes_xts")
+-- Add lib to path
+package.path = "../lib/?.lua;../lib/?/init.lua;" .. package.path
+
+local ipcrypt = require("ipcrypt")
+local utils = ipcrypt.utils
+local ipcrypt_deterministic = ipcrypt.deterministic
+local ipcrypt_nd = ipcrypt.nd
+local ipcrypt_ndx = ipcrypt.ndx
+local kiasu_bc = require("ipcrypt.cipher.kiasu_bc")
+local aes_xts = require("ipcrypt.cipher.aes_xts")
 
 -- Test vectors from the specification
 local TEST_VECTORS = {

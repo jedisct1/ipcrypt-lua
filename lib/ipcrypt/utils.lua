@@ -22,21 +22,18 @@ function utils.hex_to_bytes(hex)
 end
 
 -- XOR two byte strings of equal length
+-- Requires Lua 5.3+ for native bitwise operators
 function utils.xor_bytes(a, b)
     assert(#a == #b, "XOR operands must have equal length")
     local result = {}
     for i = 1, #a do
         local byte_a = string.byte(a, i)
         local byte_b = string.byte(b, i)
-        result[i] = string.char(bit32 and bit32.bxor(byte_a, byte_b) or (byte_a ~ byte_b))
+        result[i] = string.char(byte_a ~ byte_b)
     end
     return table.concat(result)
 end
 
--- Create a string of zero bytes
-function utils.zero_bytes(n)
-    return string.rep("\0", n)
-end
 
 -- Parse IPv4 address string to 4 bytes
 function utils.parse_ipv4(ip_str)
@@ -119,7 +116,7 @@ function utils.ip_to_bytes(ip_str)
     if ip_str:match("^%d+%.%d+%.%d+%.%d+$") then
         -- IPv4 address - convert to IPv4-mapped IPv6 format
         local ipv4_bytes = utils.parse_ipv4(ip_str)
-        return utils.zero_bytes(10) .. "\xff\xff" .. ipv4_bytes
+        return string.rep("\0", 10) .. "\xff\xff" .. ipv4_bytes
     else
         -- IPv6 address
         return utils.parse_ipv6(ip_str)
@@ -134,7 +131,7 @@ function utils.bytes_to_ip(bytes16)
     local prefix = bytes16:sub(1, 10)
     local ffff = bytes16:sub(11, 12)
     
-    if prefix == utils.zero_bytes(10) and ffff == "\xff\xff" then
+    if prefix == string.rep("\0", 10) and ffff == "\xff\xff" then
         -- IPv4 address
         local ipv4_bytes = bytes16:sub(13, 16)
         local octets = {}
@@ -190,16 +187,71 @@ function utils.bytes_to_ip(bytes16)
     end
 end
 
--- Generate random bytes (uses os.time and math.random as fallback)
--- Note: This is NOT cryptographically secure! 
--- For production use, you should use a proper random source
-function utils.random_bytes(n)
-    math.randomseed(os.time() + os.clock() * 1000000)
-    local bytes = {}
-    for i = 1, n do
-        bytes[i] = string.char(math.random(0, 255))
+-- Generate cryptographically secure random bytes
+-- Requires /dev/urandom or /dev/random on Unix-like systems
+local random_source = nil
+
+-- Detect available random source
+local function init_random_source()
+    -- Try /dev/urandom (preferred on Unix-like systems)
+    local f = io.open("/dev/urandom", "rb")
+    if f then
+        random_source = "urandom"
+        f:close()
+        return
     end
-    return table.concat(bytes)
+    
+    -- Try /dev/random as fallback (may block)
+    f = io.open("/dev/random", "rb")
+    if f then
+        random_source = "random"
+        f:close()
+        return
+    end
+    
+    random_source = nil
+end
+
+init_random_source()
+
+function utils.random_bytes(n)
+    assert(n > 0, "Number of bytes must be positive")
+    assert(random_source, "No cryptographically secure random source available. " ..
+                          "Requires /dev/urandom or /dev/random.")
+    
+    local device = (random_source == "urandom") and "/dev/urandom" or "/dev/random"
+    local f = assert(io.open(device, "rb"), "Failed to open " .. device)
+    local data = assert(f:read(n), "Failed to read from " .. device)
+    f:close()
+    assert(#data == n, "Failed to read requested number of bytes")
+    return data
+end
+
+-- Check if secure random is available
+function utils.has_secure_random()
+    return random_source ~= nil
+end
+
+-- Get random source info
+function utils.get_random_source()
+    return random_source or "none"
+end
+
+-- Generate a cryptographically secure key of specified length
+function utils.generate_key(length)
+    assert(length == 16 or length == 32, "Key length must be 16 or 32 bytes")
+    
+    if not utils.has_secure_random() then
+        error("Cannot generate secure key: no cryptographically secure random source available. " ..
+              "Please use /dev/urandom or provide keys from an external secure source.")
+    end
+    
+    return utils.random_bytes(length)
+end
+
+-- Generate a key and return it as a hex string
+function utils.generate_key_hex(length)
+    return utils.bytes_to_hex(utils.generate_key(length))
 end
 
 return utils

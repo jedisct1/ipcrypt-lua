@@ -1,7 +1,7 @@
 -- aes_xts.lua - AES-XTS implementation for IPCrypt
 
-local utils = require("utils")
-local aes = require("aes")
+local utils = require("ipcrypt.utils")
+local aes = require("ipcrypt.cipher.aes")
 
 local aes_xts = {}
 

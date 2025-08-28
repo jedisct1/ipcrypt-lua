@@ -1,7 +1,7 @@
 -- ipcrypt_nd.lua - Non-deterministic IPCrypt implementation using KIASU-BC
 
-local utils = require("utils")
-local kiasu_bc = require("kiasu_bc")
+local utils = require("ipcrypt.utils")
+local kiasu_bc = require("ipcrypt.cipher.kiasu_bc")
 
 local ipcrypt_nd = {}
 

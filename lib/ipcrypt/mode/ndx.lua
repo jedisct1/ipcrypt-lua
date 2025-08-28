@@ -1,7 +1,7 @@
 -- ipcrypt_ndx.lua - Non-deterministic IPCrypt implementation using AES-XTS
 
-local utils = require("utils")
-local aes_xts = require("aes_xts")
+local utils = require("ipcrypt.utils")
+local aes_xts = require("ipcrypt.cipher.aes_xts")
 
 local ipcrypt_ndx = {}
 

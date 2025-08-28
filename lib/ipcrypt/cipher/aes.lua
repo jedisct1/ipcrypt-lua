@@ -1,10 +1,8 @@
 -- aes.lua - AES-128 implementation using shared core
 
-local aes_core = require("aes_core")
+local aes_core = require("ipcrypt.cipher.aes_core")
 local aes = {}
 
--- Import bit operations from core
-local bxor = aes_core.bxor
 
 -- Re-export expand_key for compatibility
 aes.expand_key = aes_core.expand_key
@@ -19,7 +17,7 @@ function aes.encrypt(plaintext, key)
     
     -- Initial round
     for i = 1, 16 do
-        state[i] = bxor(state[i], round_keys[i])
+        state[i] = aes_core.bxor(state[i], round_keys[i])
     end
     
     -- Main rounds
@@ -28,7 +26,7 @@ function aes.encrypt(plaintext, key)
         aes_core.shift_rows(state)
         aes_core.mix_columns(state)
         for i = 1, 16 do
-            state[i] = bxor(state[i], round_keys[round * 16 + i])
+            state[i] = aes_core.bxor(state[i], round_keys[round * 16 + i])
         end
     end
     
@@ -36,7 +34,7 @@ function aes.encrypt(plaintext, key)
     aes_core.sub_bytes(state)
     aes_core.shift_rows(state)
     for i = 1, 16 do
-        state[i] = bxor(state[i], round_keys[160 + i])
+        state[i] = aes_core.bxor(state[i], round_keys[160 + i])
     end
     
     return aes_core.state_to_bytes(state)
@@ -52,7 +50,7 @@ function aes.decrypt(ciphertext, key)
     
     -- Initial round
     for i = 1, 16 do
-        state[i] = bxor(state[i], round_keys[160 + i])
+        state[i] = aes_core.bxor(state[i], round_keys[160 + i])
     end
     
     -- Main rounds
@@ -60,7 +58,7 @@ function aes.decrypt(ciphertext, key)
         aes_core.inv_shift_rows(state)
         aes_core.inv_sub_bytes(state)
         for i = 1, 16 do
-            state[i] = bxor(state[i], round_keys[round * 16 + i])
+            state[i] = aes_core.bxor(state[i], round_keys[round * 16 + i])
         end
         aes_core.inv_mix_columns(state)
     end
@@ -69,7 +67,7 @@ function aes.decrypt(ciphertext, key)
     aes_core.inv_shift_rows(state)
     aes_core.inv_sub_bytes(state)
     for i = 1, 16 do
-        state[i] = bxor(state[i], round_keys[i])
+        state[i] = aes_core.bxor(state[i], round_keys[i])
     end
     
     return aes_core.state_to_bytes(state)

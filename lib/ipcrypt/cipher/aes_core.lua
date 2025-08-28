@@ -2,29 +2,14 @@
 
 local aes_core = {}
 
--- Use bit32 library if available, otherwise use Lua 5.3+ bitwise operators
-local band, bor, bxor, lshift, rshift
-if bit32 then
-    band = bit32.band
-    bor = bit32.bor
-    bxor = bit32.bxor
-    lshift = function(x, n) return bit32.lshift(x, n) % 0x100000000 end
-    rshift = bit32.rshift
-else
-    -- Lua 5.3+ bitwise operators
-    band = function(a, b) return a & b end
-    bor = function(a, b) return a | b end
-    bxor = function(a, b) return a ~ b end
-    lshift = function(x, n) return (x << n) & 0xFFFFFFFF end
-    rshift = function(x, n) return x >> n end
-end
+-- Lua 5.3+ required for native bitwise operators
+-- No backwards compatibility with bit32 library
+aes_core.bxor = function(a, b) return a ~ b end
 
--- Export bit operations for use by other modules
-aes_core.band = band
-aes_core.bor = bor
-aes_core.bxor = bxor
-aes_core.lshift = lshift
-aes_core.rshift = rshift
+-- Local bitwise operations for internal use
+local function band(a, b) return a & b end
+local function lshift(x, n) return (x << n) & 0xFFFFFFFF end
+local function rshift(x, n) return x >> n end
 
 -- AES S-box
 aes_core.SBOX = {
@@ -73,14 +58,14 @@ aes_core.RCON = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36}
 function aes_core.mul2(x)
     local result = lshift(x, 1)
     if band(x, 0x80) ~= 0 then
-        result = bxor(result, 0x1B)
+        result = aes_core.bxor(result, 0x1B)
     end
     return band(result, 0xFF)
 end
 
 -- GF(2^8) multiplication by 3
 function aes_core.mul3(x)
-    return bxor(aes_core.mul2(x), x)
+    return aes_core.bxor(aes_core.mul2(x), x)
 end
 
 -- GF(2^8) multiplication
@@ -88,12 +73,12 @@ function aes_core.gmul(a, b)
     local p = 0
     for i = 0, 7 do
         if band(b, 1) ~= 0 then
-            p = bxor(p, a)
+            p = aes_core.bxor(p, a)
         end
         local hi_bit_set = band(a, 0x80) ~= 0
         a = band(lshift(a, 1), 0xFF)
         if hi_bit_set then
-            a = bxor(a, 0x1B)
+            a = aes_core.bxor(a, 0x1B)
         end
         b = rshift(b, 1)
     end
@@ -123,7 +108,6 @@ function aes_core.sub_bytes(state)
     for i = 1, 16 do
         state[i] = aes_core.SBOX[state[i] + 1]
     end
-    return state
 end
 
 -- Inverse SubBytes transformation
@@ -131,7 +115,6 @@ function aes_core.inv_sub_bytes(state)
     for i = 1, 16 do
         state[i] = aes_core.INV_SBOX[state[i] + 1]
     end
-    return state
 end
 
 -- ShiftRows transformation for standard AES column-major ordering
@@ -154,8 +137,6 @@ function aes_core.shift_rows(state)
     state[16] = state[12]
     state[12] = state[8]
     state[8] = temp
-    
-    return state
 end
 
 -- ShiftRows for row-major ordering (used by KIASU-BC)
@@ -200,8 +181,6 @@ function aes_core.inv_shift_rows(state)
     state[12] = state[16]
     state[16] = state[4]
     state[4] = temp
-    
-    return state
 end
 
 -- Inverse ShiftRows for row-major ordering (used by KIASU-BC)
@@ -235,12 +214,11 @@ function aes_core.mix_columns(state)
         local s2 = state[i + 2]
         local s3 = state[i + 3]
         
-        state[i] = bxor(bxor(bxor(aes_core.mul2(s0), aes_core.mul3(s1)), s2), s3)
-        state[i + 1] = bxor(bxor(bxor(s0, aes_core.mul2(s1)), aes_core.mul3(s2)), s3)
-        state[i + 2] = bxor(bxor(bxor(s0, s1), aes_core.mul2(s2)), aes_core.mul3(s3))
-        state[i + 3] = bxor(bxor(bxor(aes_core.mul3(s0), s1), s2), aes_core.mul2(s3))
+        state[i] = aes_core.bxor(aes_core.bxor(aes_core.bxor(aes_core.mul2(s0), aes_core.mul3(s1)), s2), s3)
+        state[i + 1] = aes_core.bxor(aes_core.bxor(aes_core.bxor(s0, aes_core.mul2(s1)), aes_core.mul3(s2)), s3)
+        state[i + 2] = aes_core.bxor(aes_core.bxor(aes_core.bxor(s0, s1), aes_core.mul2(s2)), aes_core.mul3(s3))
+        state[i + 3] = aes_core.bxor(aes_core.bxor(aes_core.bxor(aes_core.mul3(s0), s1), s2), aes_core.mul2(s3))
     end
-    return state
 end
 
 -- Inverse MixColumns transformation
@@ -252,30 +230,17 @@ function aes_core.inv_mix_columns(state)
         local s2 = state[i + 2]
         local s3 = state[i + 3]
         
-        state[i] = bxor(bxor(bxor(aes_core.gmul(0x0e, s0), aes_core.gmul(0x0b, s1)), 
+        state[i] = aes_core.bxor(aes_core.bxor(aes_core.bxor(aes_core.gmul(0x0e, s0), aes_core.gmul(0x0b, s1)), 
                             aes_core.gmul(0x0d, s2)), aes_core.gmul(0x09, s3))
-        state[i + 1] = bxor(bxor(bxor(aes_core.gmul(0x09, s0), aes_core.gmul(0x0e, s1)), 
+        state[i + 1] = aes_core.bxor(aes_core.bxor(aes_core.bxor(aes_core.gmul(0x09, s0), aes_core.gmul(0x0e, s1)), 
                                aes_core.gmul(0x0b, s2)), aes_core.gmul(0x0d, s3))
-        state[i + 2] = bxor(bxor(bxor(aes_core.gmul(0x0d, s0), aes_core.gmul(0x09, s1)), 
+        state[i + 2] = aes_core.bxor(aes_core.bxor(aes_core.bxor(aes_core.gmul(0x0d, s0), aes_core.gmul(0x09, s1)), 
                                aes_core.gmul(0x0e, s2)), aes_core.gmul(0x0b, s3))
-        state[i + 3] = bxor(bxor(bxor(aes_core.gmul(0x0b, s0), aes_core.gmul(0x0d, s1)), 
+        state[i + 3] = aes_core.bxor(aes_core.bxor(aes_core.bxor(aes_core.gmul(0x0b, s0), aes_core.gmul(0x0d, s1)), 
                                aes_core.gmul(0x09, s2)), aes_core.gmul(0x0e, s3))
     end
-    return state
 end
 
--- AddRoundKey transformation
-function aes_core.add_round_key(state, round_key)
-    for i = 1, 16 do
-        state[i] = bxor(state[i], round_key[i])
-    end
-    return state
-end
-
--- Rotate word for key expansion
-function aes_core.rot_word(word)
-    return {word[2], word[3], word[4], word[1]}
-end
 
 -- Key expansion for AES-128
 function aes_core.expand_key(key)
@@ -291,7 +256,7 @@ function aes_core.expand_key(key)
     
     -- Generate 10 more round keys
     for round = 1, 10 do
-        -- Rotate word
+        -- Rotate word (inline)
         local temp = {
             round_keys[(round - 1) * 16 + 14],
             round_keys[(round - 1) * 16 + 15],
@@ -305,16 +270,16 @@ function aes_core.expand_key(key)
         end
         
         -- XOR with round constant
-        temp[1] = bxor(temp[1], aes_core.RCON[round])
+        temp[1] = aes_core.bxor(temp[1], aes_core.RCON[round])
         
         -- Generate round key
         for i = 0, 3 do
             for j = 0, 3 do
                 local idx = round * 16 + i * 4 + j + 1
                 if i == 0 then
-                    round_keys[idx] = bxor(round_keys[(round - 1) * 16 + j + 1], temp[j + 1])
+                    round_keys[idx] = aes_core.bxor(round_keys[(round - 1) * 16 + j + 1], temp[j + 1])
                 else
-                    round_keys[idx] = bxor(round_keys[(round - 1) * 16 + i * 4 + j + 1],
+                    round_keys[idx] = aes_core.bxor(round_keys[(round - 1) * 16 + i * 4 + j + 1],
                                           round_keys[round * 16 + (i - 1) * 4 + j + 1])
                 end
             end
