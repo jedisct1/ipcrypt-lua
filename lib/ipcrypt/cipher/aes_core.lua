@@ -2,8 +2,6 @@
 
 local aes_core = {}
 
--- Lua 5.3+ required for native bitwise operators
--- No backwards compatibility with bit32 library
 aes_core.bxor = function(a, b) return a ~ b end
 
 -- Local bitwise operations for internal use
@@ -58,7 +56,7 @@ aes_core.INV_SBOX = {
 aes_core.RCON = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36}
 
 -- GF(2^8) multiplication by 2
-function aes_core.mul2(x)
+local function mul2(x)
     local result = lshift(x, 1)
     if band(x, 0x80) ~= 0 then
         result = result ~ 0x1B
@@ -67,25 +65,36 @@ function aes_core.mul2(x)
 end
 
 -- GF(2^8) multiplication by 3
-function aes_core.mul3(x)
-    return aes_core.mul2(x) ~ x
+local function mul3(x)
+    return mul2(x) ~ x
 end
 
--- GF(2^8) multiplication
-function aes_core.gmul(a, b)
-    local p = 0
-    for i = 0, 7 do
-        if band(b, 1) ~= 0 then
-            p = p ~ a
-        end
-        local hi_bit_set = band(a, 0x80) ~= 0
-        a = band(lshift(a, 1), 0xFF)
-        if hi_bit_set then
-            a = a ~ 0x1B
-        end
-        b = rshift(b, 1)
-    end
-    return p
+-- Specialized GF(2^8) multipliers for inverse MixColumns
+local function mul4(x)
+    return mul2(mul2(x))
+end
+
+local function mul8(x)
+    return mul2(mul2(mul2(x)))
+end
+
+local function mul9(x)   -- 0x09 = 8 + 1
+    return mul8(x) ~ x
+end
+
+local function mul11(x)  -- 0x0b = 8 + 2 + 1
+    return mul8(x) ~ mul2(x) ~ x
+end
+
+local function mul13(x)  -- 0x0d = 8 + 4 + 1
+    return mul8(x) ~ mul4(x) ~ x
+end
+
+local function mul14(x)  -- 0x0e = 8 + 4 + 2
+    local x2 = mul2(x)
+    local x4 = mul4(x)
+    local x8 = mul8(x)
+    return x8 ~ x4 ~ x2
 end
 
 -- Convert state from bytes to matrix
@@ -210,7 +219,6 @@ end
 
 -- MixColumns transformation
 function aes_core.mix_columns(state)
-    local mul2, mul3 = aes_core.mul2, aes_core.mul3
     for c = 0, 3 do
         local i = c * 4 + 1
         local s0 = state[i]
@@ -227,7 +235,6 @@ end
 
 -- Inverse MixColumns transformation
 function aes_core.inv_mix_columns(state)
-    local gmul = aes_core.gmul
     for c = 0, 3 do
         local i = c * 4 + 1
         local s0 = state[i]
@@ -235,10 +242,10 @@ function aes_core.inv_mix_columns(state)
         local s2 = state[i + 2]
         local s3 = state[i + 3]
 
-        state[i]     = (gmul(0x0e, s0) ~ gmul(0x0b, s1)) ~ (gmul(0x0d, s2) ~ gmul(0x09, s3))
-        state[i + 1] = (gmul(0x09, s0) ~ gmul(0x0e, s1)) ~ (gmul(0x0b, s2) ~ gmul(0x0d, s3))
-        state[i + 2] = (gmul(0x0d, s0) ~ gmul(0x09, s1)) ~ (gmul(0x0e, s2) ~ gmul(0x0b, s3))
-        state[i + 3] = (gmul(0x0b, s0) ~ gmul(0x0d, s1)) ~ (gmul(0x09, s2) ~ gmul(0x0e, s3))
+        state[i]     = (mul14(s0) ~ mul11(s1)) ~ (mul13(s2) ~ mul9(s3))
+        state[i + 1] = (mul9(s0) ~ mul14(s1)) ~ (mul11(s2) ~ mul13(s3))
+        state[i + 2] = (mul13(s0) ~ mul9(s1)) ~ (mul14(s2) ~ mul11(s3))
+        state[i + 3] = (mul11(s0) ~ mul13(s1)) ~ (mul9(s2) ~ mul14(s3))
     end
 end
 
