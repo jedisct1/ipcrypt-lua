@@ -1,9 +1,9 @@
 package = "ipcrypt"
-version = "1.0.0-1"
+version = "1.0.1-1"
 
 source = {
     url = "git+https://github.com/jedisct1/ipcrypt-lua.git",
-    tag = "1.0.0"
+    tag = "1.0.1"
 }
 
 description = {

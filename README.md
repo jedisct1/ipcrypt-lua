@@ -48,7 +48,7 @@ sudo make uninstall
 ### LuaRocks Installation
 
 ```bash
-luarocks install ipcrypt-1.0.0-1.rockspec
+luarocks install ipcrypt-1.0.1-1.rockspec
 ```
 
 ## Usage
