@@ -94,14 +94,14 @@ local function test_deterministic()
         local key = utils.hex_to_bytes(test.key)
         local encrypted = ipcrypt_deterministic.encrypt(test.ip, key)
         
-        if assert_equal(encrypted, test.expected, 
+        if assert_equal(encrypted, test.expected,
                        string.format("Test %d: %s", i, test.ip)) then
             -- Also test decryption
             local decrypted = ipcrypt_deterministic.decrypt(encrypted, key)
-            if assert_equal(decrypted, test.ip, 
+            if assert_equal(decrypted, test.ip,
                           string.format("Test %d decrypt", i)) then
                 passed = passed + 1
-                print(string.format("  Test %d: PASSED (%s -> %s)", 
+                print(string.format("  Test %d: PASSED (%s -> %s)",
                                   i, test.ip, encrypted))
             else
                 failed = failed + 1
@@ -130,12 +130,12 @@ local function test_nd()
         local ciphertext = kiasu_bc.encrypt(key, tweak, plaintext)
         local result = utils.bytes_to_hex(tweak .. ciphertext)
         
-        if assert_equal(result, test.expected, 
+        if assert_equal(result, test.expected,
                        string.format("Test %d: %s", i, test.ip)) then
             -- Also test decryption
             local encrypted_data = utils.hex_to_bytes(test.expected)
             local decrypted = ipcrypt_nd.decrypt(encrypted_data, key)
-            if assert_equal(decrypted, test.ip, 
+            if assert_equal(decrypted, test.ip,
                           string.format("Test %d decrypt", i)) then
                 passed = passed + 1
                 print(string.format("  Test %d: PASSED (%s)", i, test.ip))
@@ -166,12 +166,12 @@ local function test_ndx()
         local ciphertext = aes_xts.encrypt(key, tweak, plaintext)
         local result = utils.bytes_to_hex(tweak .. ciphertext)
         
-        if assert_equal(result, test.expected, 
+        if assert_equal(result, test.expected,
                        string.format("Test %d: %s", i, test.ip)) then
             -- Also test decryption
             local encrypted_data = utils.hex_to_bytes(test.expected)
             local decrypted = ipcrypt_ndx.decrypt(encrypted_data, key)
-            if assert_equal(decrypted, test.ip, 
+            if assert_equal(decrypted, test.ip,
                           string.format("Test %d decrypt", i)) then
                 passed = passed + 1
                 print(string.format("  Test %d: PASSED (%s)", i, test.ip))

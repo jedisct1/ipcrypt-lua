@@ -1,18 +1,11 @@
--- aes_core.lua - Shared AES core operations
-
 local aes_core = {}
 
-aes_core.bxor = function(a, b) return a ~ b end
-
--- Local bitwise operations for internal use
-local function band(a, b) return a & b end
-local function lshift(x, n) return (x << n) & 0xFFFFFFFF end
-local function rshift(x, n) return x >> n end
-
--- Frequently used stdlib locals
 local str_byte, str_char = string.byte, string.char
+local band = function(a, b) return a & b end
+local bxor = function(a, b) return a ~ b end
 
--- AES S-box
+aes_core.bxor = bxor
+
 aes_core.SBOX = {
     0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b, 0xfe, 0xd7, 0xab, 0x76,
     0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf, 0x9c, 0xa4, 0x72, 0xc0,
@@ -32,7 +25,6 @@ aes_core.SBOX = {
     0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f, 0xb0, 0x54, 0xbb, 0x16
 }
 
--- Inverse S-box
 aes_core.INV_SBOX = {
     0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e, 0x81, 0xf3, 0xd7, 0xfb,
     0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44, 0xc4, 0xde, 0xe9, 0xcb,
@@ -52,106 +44,88 @@ aes_core.INV_SBOX = {
     0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d
 }
 
--- Round constants
 aes_core.RCON = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36}
-
--- GF(2^8) multiplication by 2
 local function mul2(x)
-    local result = lshift(x, 1)
-    if band(x, 0x80) ~= 0 then
-        result = result ~ 0x1B
-    end
-    return band(result, 0xFF)
+    return band((x << 1) ~ ((x >> 7) * 0x1B), 0xFF)
 end
 
--- GF(2^8) multiplication by 3
 local function mul3(x)
-    return mul2(x) ~ x
+    return bxor(mul2(x), x)
 end
 
--- Specialized GF(2^8) multipliers for inverse MixColumns
 local function mul4(x)
-    return mul2(mul2(x))
+    local x2 = mul2(x)
+    return mul2(x2)
 end
 
 local function mul8(x)
-    return mul2(mul2(mul2(x)))
-end
-
-local function mul9(x)   -- 0x09 = 8 + 1
-    return mul8(x) ~ x
-end
-
-local function mul11(x)  -- 0x0b = 8 + 2 + 1
-    return mul8(x) ~ mul2(x) ~ x
-end
-
-local function mul13(x)  -- 0x0d = 8 + 4 + 1
-    return mul8(x) ~ mul4(x) ~ x
-end
-
-local function mul14(x)  -- 0x0e = 8 + 4 + 2
     local x2 = mul2(x)
+    local x4 = mul2(x2)
+    return mul2(x4)
+end
+
+local function mul9(x)
+    return bxor(mul8(x), x)
+end
+
+local function mul11(x)
+    local x2 = mul2(x)
+    return bxor(bxor(mul8(x), x2), x)
+end
+
+local function mul13(x)
     local x4 = mul4(x)
-    local x8 = mul8(x)
-    return x8 ~ x4 ~ x2
+    return bxor(bxor(mul8(x), x4), x)
 end
 
--- Convert state from bytes to matrix
+local function mul14(x)
+    local x2 = mul2(x)
+    local x4 = mul2(x2)
+    local x8 = mul2(x4)
+    return bxor(bxor(x8, x4), x2)
+end
+
 function aes_core.bytes_to_state(bytes)
-    local b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12,b13,b14,b15,b16 = str_byte(bytes, 1, 16)
-    return {b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12,b13,b14,b15,b16}
+    return {str_byte(bytes, 1, 16)}
 end
 
--- Convert state from matrix to bytes
 function aes_core.state_to_bytes(state)
-    return str_char(
-        state[1], state[2], state[3], state[4],
-        state[5], state[6], state[7], state[8],
-        state[9], state[10], state[11], state[12],
-        state[13], state[14], state[15], state[16]
-    )
+    return str_char(state[1], state[2], state[3], state[4],
+                    state[5], state[6], state[7], state[8],
+                    state[9], state[10], state[11], state[12],
+                    state[13], state[14], state[15], state[16])
 end
 
--- SubBytes transformation
 function aes_core.sub_bytes(state)
     local SBOX = aes_core.SBOX
-    for i = 1, 16 do
-        state[i] = SBOX[state[i] + 1]
-    end
+    state[1], state[2], state[3], state[4] =
+        SBOX[state[1] + 1], SBOX[state[2] + 1], SBOX[state[3] + 1], SBOX[state[4] + 1]
+    state[5], state[6], state[7], state[8] =
+        SBOX[state[5] + 1], SBOX[state[6] + 1], SBOX[state[7] + 1], SBOX[state[8] + 1]
+    state[9], state[10], state[11], state[12] =
+        SBOX[state[9] + 1], SBOX[state[10] + 1], SBOX[state[11] + 1], SBOX[state[12] + 1]
+    state[13], state[14], state[15], state[16] =
+        SBOX[state[13] + 1], SBOX[state[14] + 1], SBOX[state[15] + 1], SBOX[state[16] + 1]
 end
 
--- Inverse SubBytes transformation
 function aes_core.inv_sub_bytes(state)
     local INV_SBOX = aes_core.INV_SBOX
-    for i = 1, 16 do
-        state[i] = INV_SBOX[state[i] + 1]
-    end
+    state[1], state[2], state[3], state[4] =
+        INV_SBOX[state[1] + 1], INV_SBOX[state[2] + 1], INV_SBOX[state[3] + 1], INV_SBOX[state[4] + 1]
+    state[5], state[6], state[7], state[8] =
+        INV_SBOX[state[5] + 1], INV_SBOX[state[6] + 1], INV_SBOX[state[7] + 1], INV_SBOX[state[8] + 1]
+    state[9], state[10], state[11], state[12] =
+        INV_SBOX[state[9] + 1], INV_SBOX[state[10] + 1], INV_SBOX[state[11] + 1], INV_SBOX[state[12] + 1]
+    state[13], state[14], state[15], state[16] =
+        INV_SBOX[state[13] + 1], INV_SBOX[state[14] + 1], INV_SBOX[state[15] + 1], INV_SBOX[state[16] + 1]
 end
 
--- ShiftRows transformation for standard AES column-major ordering
 function aes_core.shift_rows(state)
-    local temp = state[2]
-    state[2] = state[6]
-    state[6] = state[10]
-    state[10] = state[14]
-    state[14] = temp
-    
-    temp = state[3]
-    state[3] = state[11]
-    state[11] = temp
-    temp = state[7]
-    state[7] = state[15]
-    state[15] = temp
-    
-    temp = state[4]
-    state[4] = state[16]
-    state[16] = state[12]
-    state[12] = state[8]
-    state[8] = temp
+    state[2], state[6], state[10], state[14] = state[6], state[10], state[14], state[2]
+    state[3], state[7], state[11], state[15] = state[11], state[15], state[3], state[7]
+    state[4], state[8], state[12], state[16] = state[16], state[4], state[8], state[12]
 end
 
--- ShiftRows for row-major ordering (used by KIASU-BC)
 function aes_core.shift_rows_row_major(state)
     local new_state = {}
     new_state[1] = state[1]
@@ -173,29 +147,12 @@ function aes_core.shift_rows_row_major(state)
     return new_state
 end
 
--- Inverse ShiftRows for standard AES
 function aes_core.inv_shift_rows(state)
-    local temp = state[14]
-    state[14] = state[10]
-    state[10] = state[6]
-    state[6] = state[2]
-    state[2] = temp
-    
-    temp = state[3]
-    state[3] = state[11]
-    state[11] = temp
-    temp = state[7]
-    state[7] = state[15]
-    state[15] = temp
-    
-    temp = state[8]
-    state[8] = state[12]
-    state[12] = state[16]
-    state[16] = state[4]
-    state[4] = temp
+    state[2], state[6], state[10], state[14] = state[14], state[2], state[6], state[10]
+    state[3], state[7], state[11], state[15] = state[11], state[15], state[3], state[7]
+    state[4], state[8], state[12], state[16] = state[8], state[12], state[16], state[4]
 end
 
--- Inverse ShiftRows for row-major ordering (used by KIASU-BC)
 function aes_core.inv_shift_rows_row_major(state)
     local new_state = {}
     new_state[1] = state[1]
@@ -217,92 +174,76 @@ function aes_core.inv_shift_rows_row_major(state)
     return new_state
 end
 
--- MixColumns transformation
 function aes_core.mix_columns(state)
     for c = 0, 3 do
         local i = c * 4 + 1
-        local s0 = state[i]
-        local s1 = state[i + 1]
-        local s2 = state[i + 2]
-        local s3 = state[i + 3]
+        local s0, s1, s2, s3 = state[i], state[i + 1], state[i + 2], state[i + 3]
+        local t = bxor(bxor(s0, s1), bxor(s2, s3))
 
-        state[i]     = (mul2(s0) ~ mul3(s1)) ~ (s2 ~ s3)
-        state[i + 1] = (s0 ~ mul2(s1)) ~ (mul3(s2) ~ s3)
-        state[i + 2] = (s0 ~ s1) ~ (mul2(s2) ~ mul3(s3))
-        state[i + 3] = (mul3(s0) ~ s1) ~ (s2 ~ mul2(s3))
+        state[i]     = bxor(bxor(s0, mul2(bxor(s0, s1))), t)
+        state[i + 1] = bxor(bxor(s1, mul2(bxor(s1, s2))), t)
+        state[i + 2] = bxor(bxor(s2, mul2(bxor(s2, s3))), t)
+        state[i + 3] = bxor(bxor(s3, mul2(bxor(s3, s0))), t)
     end
 end
 
--- Inverse MixColumns transformation
 function aes_core.inv_mix_columns(state)
     for c = 0, 3 do
         local i = c * 4 + 1
-        local s0 = state[i]
-        local s1 = state[i + 1]
-        local s2 = state[i + 2]
-        local s3 = state[i + 3]
+        local s0, s1, s2, s3 = state[i], state[i + 1], state[i + 2], state[i + 3]
 
-        state[i]     = (mul14(s0) ~ mul11(s1)) ~ (mul13(s2) ~ mul9(s3))
-        state[i + 1] = (mul9(s0) ~ mul14(s1)) ~ (mul11(s2) ~ mul13(s3))
-        state[i + 2] = (mul13(s0) ~ mul9(s1)) ~ (mul14(s2) ~ mul11(s3))
-        state[i + 3] = (mul11(s0) ~ mul13(s1)) ~ (mul9(s2) ~ mul14(s3))
+        state[i]     = bxor(bxor(mul14(s0), mul11(s1)), bxor(mul13(s2), mul9(s3)))
+        state[i + 1] = bxor(bxor(mul9(s0), mul14(s1)), bxor(mul11(s2), mul13(s3)))
+        state[i + 2] = bxor(bxor(mul13(s0), mul9(s1)), bxor(mul14(s2), mul11(s3)))
+        state[i + 3] = bxor(bxor(mul11(s0), mul13(s1)), bxor(mul9(s2), mul14(s3)))
     end
 end
 
-
--- Key expansion for AES-128
 function aes_core.expand_key(key)
     assert(#key == 16, "Key must be 16 bytes")
-    
+
     local round_keys = {}
-    local key_state = aes_core.bytes_to_state(key)
-    
-    -- First round key is the key itself
-    for i = 1, 16 do
-        round_keys[i] = key_state[i]
-    end
-    
-    -- Generate 10 more round keys
+    local SBOX = aes_core.SBOX
+    local RCON = aes_core.RCON
+
+    local b1,b2,b3,b4,b5,b6,b7,b8,b9,b10,b11,b12,b13,b14,b15,b16 = str_byte(key, 1, 16)
+    round_keys[1], round_keys[2], round_keys[3], round_keys[4] = b1, b2, b3, b4
+    round_keys[5], round_keys[6], round_keys[7], round_keys[8] = b5, b6, b7, b8
+    round_keys[9], round_keys[10], round_keys[11], round_keys[12] = b9, b10, b11, b12
+    round_keys[13], round_keys[14], round_keys[15], round_keys[16] = b13, b14, b15, b16
+
     for round = 1, 10 do
         local base = (round - 1) * 16
         local out  = round * 16
 
-        -- Rotate last word of previous round key and apply SubBytes
-        local t0 = aes_core.SBOX[round_keys[base + 14] + 1]
-        local t1 = aes_core.SBOX[round_keys[base + 15] + 1]
-        local t2 = aes_core.SBOX[round_keys[base + 16] + 1]
-        local t3 = aes_core.SBOX[round_keys[base + 13] + 1]
+        local t0 = bxor(SBOX[round_keys[base + 14] + 1], RCON[round])
+        local t1 = SBOX[round_keys[base + 15] + 1]
+        local t2 = SBOX[round_keys[base + 16] + 1]
+        local t3 = SBOX[round_keys[base + 13] + 1]
+        round_keys[out + 1] = bxor(round_keys[base + 1], t0)
+        round_keys[out + 2] = bxor(round_keys[base + 2], t1)
+        round_keys[out + 3] = bxor(round_keys[base + 3], t2)
+        round_keys[out + 4] = bxor(round_keys[base + 4], t3)
 
-        -- XOR with round constant
-        t0 = t0 ~ aes_core.RCON[round]
+        round_keys[out + 5]  = bxor(round_keys[base + 5], round_keys[out + 1])
+        round_keys[out + 6]  = bxor(round_keys[base + 6], round_keys[out + 2])
+        round_keys[out + 7]  = bxor(round_keys[base + 7], round_keys[out + 3])
+        round_keys[out + 8]  = bxor(round_keys[base + 8], round_keys[out + 4])
 
-        -- First 4 bytes
-        round_keys[out + 1] = round_keys[base + 1] ~ t0
-        round_keys[out + 2] = round_keys[base + 2] ~ t1
-        round_keys[out + 3] = round_keys[base + 3] ~ t2
-        round_keys[out + 4] = round_keys[base + 4] ~ t3
+        round_keys[out + 9]  = bxor(round_keys[base + 9], round_keys[out + 5])
+        round_keys[out + 10] = bxor(round_keys[base + 10], round_keys[out + 6])
+        round_keys[out + 11] = bxor(round_keys[base + 11], round_keys[out + 7])
+        round_keys[out + 12] = bxor(round_keys[base + 12], round_keys[out + 8])
 
-        -- Remaining bytes derived sequentially
-        round_keys[out + 5]  = round_keys[base + 5]  ~ round_keys[out + 1]
-        round_keys[out + 6]  = round_keys[base + 6]  ~ round_keys[out + 2]
-        round_keys[out + 7]  = round_keys[base + 7]  ~ round_keys[out + 3]
-        round_keys[out + 8]  = round_keys[base + 8]  ~ round_keys[out + 4]
-
-        round_keys[out + 9]  = round_keys[base + 9]  ~ round_keys[out + 5]
-        round_keys[out + 10] = round_keys[base + 10] ~ round_keys[out + 6]
-        round_keys[out + 11] = round_keys[base + 11] ~ round_keys[out + 7]
-        round_keys[out + 12] = round_keys[base + 12] ~ round_keys[out + 8]
-
-        round_keys[out + 13] = round_keys[base + 13] ~ round_keys[out + 9]
-        round_keys[out + 14] = round_keys[base + 14] ~ round_keys[out + 10]
-        round_keys[out + 15] = round_keys[base + 15] ~ round_keys[out + 11]
-        round_keys[out + 16] = round_keys[base + 16] ~ round_keys[out + 12]
+        round_keys[out + 13] = bxor(round_keys[base + 13], round_keys[out + 9])
+        round_keys[out + 14] = bxor(round_keys[base + 14], round_keys[out + 10])
+        round_keys[out + 15] = bxor(round_keys[base + 15], round_keys[out + 11])
+        round_keys[out + 16] = bxor(round_keys[base + 16], round_keys[out + 12])
     end
-    
+
     return round_keys
 end
 
--- Get round keys as byte strings (for KIASU-BC)
 function aes_core.get_round_key_bytes(expanded_keys, round)
     local start_idx = (round - 1) * 16 + 1
     return str_char(

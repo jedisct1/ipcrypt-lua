@@ -3,7 +3,7 @@
 local ipcrypt = {
     -- Version information
     VERSION = "1.0.0",
-    
+
     -- Export individual modules (lazy loaded)
     deterministic = require("ipcrypt.mode.deterministic"),
     nd = require("ipcrypt.mode.nd"),

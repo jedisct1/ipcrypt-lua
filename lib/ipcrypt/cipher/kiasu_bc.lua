@@ -5,7 +5,6 @@ local aes_core = require("ipcrypt.cipher.aes_core")
 
 local kiasu_bc = {}
 
-
 -- Pad an 8-byte tweak to 16 bytes for KIASU-BC
 -- Places each 2-byte pair at the start of each 4-byte group
 function kiasu_bc.pad_tweak(tweak)

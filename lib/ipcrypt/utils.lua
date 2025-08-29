@@ -34,7 +34,6 @@ function utils.xor_bytes(a, b)
     return table.concat(result)
 end
 
-
 -- Parse IPv4 address string to 4 bytes
 function utils.parse_ipv4(ip_str)
     local octets = {}

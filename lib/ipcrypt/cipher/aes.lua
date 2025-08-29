@@ -1,8 +1,8 @@
 -- aes.lua - AES-128 implementation using shared core
 
 local aes_core = require("ipcrypt.cipher.aes_core")
-local aes = {}
 
+local aes = {}
 
 -- Re-export expand_key for compatibility
 aes.expand_key = aes_core.expand_key
