@@ -8,6 +8,7 @@ local ipcrypt = {
     deterministic = require("ipcrypt.mode.deterministic"),
     nd = require("ipcrypt.mode.nd"),
     ndx = require("ipcrypt.mode.ndx"),
+    pfx = require("ipcrypt.mode.pfx"),
     utils = require("ipcrypt.utils"),
 }
 

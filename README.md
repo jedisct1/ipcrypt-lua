@@ -7,6 +7,7 @@ A pure Lua implementation of the IPCrypt specification for IP address encryption
 - **Deterministic encryption** - AES-128 based, always produces same output for same input
 - **Non-deterministic (ND)** - KIASU-BC with 8-byte random tweaks  
 - **Non-deterministic extended (NDX)** - AES-XTS with 16-byte random tweaks
+- **Prefix-preserving (PFX)** - Format-preserving encryption that maintains IPv4/IPv6 type
 - **IPv4 and IPv6 support** - Full support for both address families
 - **Zero dependencies** - Pure Lua implementation
 
@@ -60,7 +61,7 @@ local ipcrypt = require("ipcrypt")
 
 -- Generate secure keys
 local key16 = ipcrypt.utils.generate_key(16)  -- For deterministic/ND
-local key32 = ipcrypt.utils.generate_key(32)  -- For NDX
+local key32 = ipcrypt.utils.generate_key(32)  -- For NDX/PFX
 
 -- Deterministic encryption (same input = same output)
 local encrypted = ipcrypt.deterministic.encrypt("192.0.2.1", key16)
@@ -86,6 +87,27 @@ local encrypted_ndx = ipcrypt.ndx.encrypt("2001:db8::1", key32)
 
 local decrypted_ndx = ipcrypt.ndx.decrypt(encrypted_ndx, key32)
 print(decrypted_ndx)  -- "2001:db8::1"
+```
+
+### Prefix-Preserving Mode (PFX)
+
+```lua
+-- PFX mode maintains IP address type (IPv4 stays IPv4, IPv6 stays IPv6)
+local key32 = ipcrypt.utils.generate_key(32)  -- PFX requires 32-byte key
+
+-- IPv4 addresses remain IPv4
+local encrypted_v4 = ipcrypt.pfx.encrypt("192.168.1.1", key32)
+print(encrypted_v4)  -- e.g., "172.31.45.67" (still IPv4)
+
+local decrypted_v4 = ipcrypt.pfx.decrypt(encrypted_v4, key32)
+print(decrypted_v4)  -- "192.168.1.1"
+
+-- IPv6 addresses remain IPv6
+local encrypted_v6 = ipcrypt.pfx.encrypt("2001:db8::1", key32)
+print(encrypted_v6)  -- e.g., "c180:5dd4:2587:3524:30ab:fa65:6ab6:f88" (still IPv6)
+
+local decrypted_v6 = ipcrypt.pfx.decrypt(encrypted_v6, key32)
+print(decrypted_v6)  -- "2001:db8::1"
 ```
 
 ### Key Generation
@@ -124,6 +146,7 @@ end
 - `ipcrypt.deterministic` - Deterministic mode module
 - `ipcrypt.nd` - Non-deterministic mode (KIASU-BC)
 - `ipcrypt.ndx` - Non-deterministic extended mode (AES-XTS)
+- `ipcrypt.pfx` - Prefix-preserving mode
 - `ipcrypt.utils` - Utility functions
 
 ### Deterministic Mode (`ipcrypt.deterministic`)
@@ -140,6 +163,11 @@ end
 
 - `encrypt(ip_string, key32, [tweak16])` - Encrypt with optional tweak
 - `decrypt(encrypted_bytes, key32)` - Decrypt (tweak included in data)
+
+### PFX Mode (`ipcrypt.pfx`)
+
+- `encrypt(ip_string, key32)` - Encrypt preserving IP type (IPv4/IPv6)
+- `decrypt(encrypted_ip, key32)` - Decrypt to original IP
 
 ### Utils (`ipcrypt.utils`)
 
